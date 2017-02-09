@@ -3,6 +3,7 @@
 var TapReporter = require('../../lib/reporters/tap_reporter');
 var DotReporter = require('../../lib/reporters/dot_reporter');
 var XUnitReporter = require('../../lib/reporters/xunit_reporter');
+var SolanoReporter = require('../../lib/reporters/solano_reporter');
 var TeamcityReporter = require('../../lib/reporters/teamcity_reporter');
 var Config = require('../../lib/config');
 var PassThrough = require('stream').PassThrough;
@@ -355,6 +356,176 @@ describe('test reporters', function() {
 
     it('presents valid XML with null messages', function() {
       var reporter = new XUnitReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'null',
+        passed: false,
+        error: { message: null }
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+
+      assertXmlIsValid(output);
+    });
+  });
+
+  describe('solano reporter', function() {
+    var config, stream;
+
+    beforeEach(function() {
+      config = new Config('ci', {
+        xunit_intermediate_output: false
+      });
+      stream = new PassThrough();
+    });
+
+    it('writes out and XML escapes results', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it does <cool> \"cool\" \'cool\' stuff',
+        passed: true
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /<testsuite name="Testem Tests" tests="1" skipped="0" failures="0" timestamp="(.+)" time="(\d+(\.\d+)?)">/);
+      assert.match(output, /<testcase classname="it does &lt;cool> &quot;cool&quot; \'cool\' stuff" name="phantomjs"/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('does not print intermediate test results when intermediate output is disabled', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      var displayed = false;
+      var write = process.stdout.write;
+      process.stdout.write = function(string, encoding, fd) {
+        write.apply(process.stdout, [string, encoding, fd]);
+        displayed = true;
+      };
+      reporter.report('phantomjs', {
+        name: 'it does stuff',
+        passed: true,
+        logs: []
+      });
+      assert(!displayed);
+      process.stdout.write = write;
+    });
+
+    it('outputs errors', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it didnt work',
+        passed: false,
+        error: {
+          message: 'it crapped out',
+          stack: (new Error('it crapped out')).stack
+        }
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /it didnt work/);
+      assert.match(output, /<error message=\"it crapped out\">/);
+      assert.match(output, /CDATA\[Error: it crapped out/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('outputs errors without stack traces', function() {
+      var config = new Config('ci', {
+        xunit_intermediate_output: false,
+        xunit_exclude_stack: true
+      });
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it didnt work',
+        passed: false,
+        error: {
+          message: 'it crapped out',
+          stack: (new Error('it crapped out')).stack
+        }
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /it didnt work/);
+      assert.match(output, /<error message=\"it crapped out\"\/>/);
+      assert.notMatch(output, /CDATA\[Error: it crapped out/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('outputs skipped tests', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it didnt work',
+        passed: false,
+        skipped: true
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /<skipped\/>/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('skipped tests are not considered failures', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it didnt work',
+        passed: false,
+        skipped: true
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.notMatch(output, /<failure/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('outputs failed tests', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it didnt work',
+        passed: false
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /<failure/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('XML escapes errors', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it failed with quotes',
+        passed: false,
+        error: {
+          message: (new Error('<it> \"crapped\" out')).stack
+        }
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /it failed with quotes"/);
+      assert.match(output, /&lt;it> &quot;crapped&quot; out/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('XML escapes messages', function() {
+      var reporter = new SolanoReporter(false, stream, config);
+      reporter.report('phantomjs', {
+        name: 'it failed with ampersands',
+        passed: false,
+        error: { message: '&&' }
+      });
+      reporter.finish();
+      var output = stream.read().toString();
+      assert.match(output, /it failed with ampersands"/);
+      assert.match(output, /&amp;&amp;/);
+
+      assertXmlIsValid(output);
+    });
+
+    it('presents valid XML with null messages', function() {
+      var reporter = new SolanoReporter(false, stream, config);
       reporter.report('phantomjs', {
         name: 'null',
         passed: false,

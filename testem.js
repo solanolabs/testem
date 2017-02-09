@@ -34,7 +34,7 @@ program
   .option('-T, --timeout [sec]', 'timeout a browser after [sec] seconds', null)
   .option('-P, --parallel [num]', 'number of browsers to run in parallel, defaults to 1', Number)
   .option('-b, --bail_on_uncaught_error', 'Bail on any uncaught errors')
-  .option('-R, --reporter [reporter]', 'Test reporter to use [tap|dot|xunit|teamcity]')
+  .option('-R, --reporter [reporter]', 'Test reporter to use [tap|dot|xunit|solano|teamcity]')
   .action(act(function(env) {
     env.__proto__ = program;
     progOptions = env;
